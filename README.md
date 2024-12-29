@@ -1,52 +1,85 @@
 # Enstruman Tanimlayici
  Şarkılardaki Enstrümanların Tespiti
 
-Enstrüman Sınıflandırma Projesi - Veri Toplama ve Ön İşleme Adımları
+Müzik Enstrümanlarının Tespiti Projesi
 
-Bu README dosyası, müzik enstrümanlarını sınıflandırmak için kullanılan veri toplama ve ön işleme sürecini açıklamaktadır. Proje, ses dosyalarından Mel Frekansı Cepstral Katsayıları (MFCC) çıkararak her bir enstrümanı sınıflandırmak için kullanılabilir.
+Proje Hakkında
+
+Bu proje, çeşitli müzik enstrümanlarının (piyano, keman, gitar, kanun) ses verilerinin toplanması, işlenmesi ve sınıflandırılması amacıyla geliştirilmiştir. Proje, ses dosyalarının toplanmasından önceki ve sonraki işlemleri, yani sessizlik temizleme, gürültü azaltma, MFCC (Mel-Frekans Kepstrum Katsayıları) çıkarımı ve etiketleme gibi adımları kapsamaktadır. Elde edilen verilerle çeşitli makine öğrenmesi modelleri eğitilmiş ve en iyi performansı sergileyen model, Random Forest Regressor seçilmiştir. Ayrıca, kullanıcıların ses dosyalarını yükleyip, bu dosyalar üzerinde enstrüman tahmini yapmalarını sağlayacak bir grafiksel kullanıcı arayüzü (GUI) geliştirilmiştir.
+
+Şarkılardaki Enstrümanların Tespiti
 
 Veri Toplama
-Veri toplama aşamasında, YouTube çalma listelerinden müzik parçaları indirilmektedir. Bu parçalar, farklı enstrümanları temsil etmektedir ( piyano, keman, gitar, kanun).
 
-Adımlar:
+Veri toplama aşamasında, her enstrümana ait ses verileri YouTube çalma listelerinden indirilmiştir. Her enstrümana özel ses dosyaları MP3 formatında kaydedilmiş ve her enstrüman için ayrı klasörlerde saklanmıştır.
 
-YouTube Playlist İndirme: yt_dlp kütüphanesi kullanılarak belirtilen bir YouTube çalma listesindeki tüm videolar indirilir ve her video MP3 formatında kaydedilir.
+Araçlar:
 
-Çalma listesi URL’si (playlist_url), ses dosyalarının indirileceği klasör (output_folder) ile belirtilir. yt_dlp araçlarıyla ses dosyaları indirilir ve MP3 formatında kaydedilir.
+yt_dlp kütüphanesi kullanılarak YouTube playlist'lerinden ses dosyaları indirilmiştir.
 
-Veri Temizleme
-Veri temizleme süreci, ses dosyalarındaki gereksiz sessiz bölümleri ve gürültüyü ortadan kaldırmayı amaçlamaktadır. Bu adımda pydub ve noisereduce gibi kütüphaneler kullanılmaktadır.
+İşlem:
 
-Adımlar:
+Çalma listelerindeki videolar, MP3 formatında indirilip ilgili klasörlere kaydedilmiştir.
 
-Sessizlik Temizleme: pydub'un silence.detect_nonsilent fonksiyonu kullanılarak sessiz bölümler temizlenir. Bu sayede yalnızca anlamlı ses segmentleri kalır.
+Veri Ön İşleme
 
-Gürültü Temizleme ve Normalizasyon: noisereduce kütüphanesi ile ses dosyalarındaki gürültü temizlenir ve librosa ile normalizasyon işlemi yapılır.,
+Veri ön işleme aşamasında ses dosyalarındaki gereksiz ses ve gürültüler temizlenmiş, ardından her ses dosyasından MFCC özellikleri çıkarılmıştır.
 
-MFCC Çıkarımı
-Bu aşama, her ses dosyasından Mel Frekansı Cepstral Katsayıları (MFCC) çıkarır. MFCC, sesin temel özelliklerini temsil eder ve ses tanıma ve sınıflandırma için yaygın olarak kullanılır.
+İşlemler:
 
-Adımlar:
+Sessizlik Temizleme: pydub kütüphanesi kullanılarak sessiz bölümler temizlenmiştir.
 
-MFCC Çıkarımı: librosa kütüphanesi kullanılarak her ses parçasından 13 MFCC katsayısı çıkarılır.
+Gürültü Temizleme: noisereduce kütüphanesi ile arka plan gürültüsü azaltılmıştır.
 
-Segmente Etme: Ses dosyaları, 3 saniyelik segmentlere ayrılır. Her segment üzerinde gürültü temizleme, normalizasyon ve MFCC çıkarma işlemleri uygulanır.
+Normalizasyon: Ses sinyali, sabit bir ses seviyesi için normalize edilmiştir.
 
-Etiketleme ve Veri Hazırlığı
-Bu adımda, her enstrüman için oluşturulmuş MFCC dosyaları etiketlenir ve model eğitimi için kullanılabilir hale getirilir.
+Özellik Çıkarımı
 
-Adımlar:
+Her ses dosyası, 3 saniyelik segmentlere bölünmüş ve her segmentten 13 MFCC özelliği çıkarılmıştır. MFCC, ses verisinin frekans özelliklerini temsil eden ve özellikle ses tanıma uygulamalarında yaygın olarak kullanılan bir tekniktir.
 
-Veri ve Etiketleri Yükleme: Her bir enstrüman için MFCC dosyaları yüklenir ve her bir dosya uygun etiketle (gitar, kanun, keman, piyano) ilişkilendirilir.
+Veri Segmentasyonu: Ses dosyaları, her biri 3 saniyelik parçalara ayrılmıştır.
 
-Veri Hazırlığı: MFCC verileri ve etiketler, modelin eğitiminde kullanılacak formatta birleştirilir.
+Etiketleme: Her segment, ait olduğu enstrümana göre etiketlenmiştir (piyano, keman, gitar, kanun).
 
-Proje İçeriği
+Sonuçta, yüksek kaliteli ve etiketlenmiş bir veri seti elde edilmiştir ve bu veri seti, makine öğrenmesi modelleri için kullanılmak üzere hazırlanmıştır.
 
-Veri Toplama: YouTube çalma listesinden ses dosyalarının indirilmesi.
+Makine Öğrenmesi Modelleri
 
-Veri Temizleme: Sessiz bölümlerin çıkarılması ve gürültü temizleme işlemleri.
+Toplanan ve işlenen verilerle çeşitli makine öğrenmesi modelleri eğitilmiştir. Bu modeller, müzik enstrümanlarının doğru bir şekilde sınıflandırılması için kullanılmıştır.
 
-MFCC Çıkarımı: Ses dosyalarından MFCC özelliklerinin çıkarılması.
+Model Listesi
 
-Etiketleme: MFCC dosyaları, her enstrümana ait etiketlerle ilişkilendirilir.
+Linear Regression (Doğrusal Regresyon): Eğitim süresi hızlı ancak doğrusal olmayan ilişkilerde performansı sınırlıdır.
+
+Ridge Regression (Ridge Regresyonu): Multikollineerlik durumunda başarılıdır ve aşırı uyum yapmayı engeller.
+
+Lasso Regression (Lasso Regresyonu): Değişken seçimi için güçlüdür, ancak doğrusal olmayan ilişkilerde sınırlıdır.
+
+Support Vector Regressor (Destek Vektör Regresyonu): Karmaşık veri setlerinde yüksek doğruluk sağlar.
+
+Random Forest Regressor (Rastgele Orman Regresyonu): Çoklu karar ağaçlarıyla yüksek doğruluk ve düşük aşırı uyum sağlar.
+
+Sonuçlar
+
+En İyi Performansı Gösteren Model: Random Forest Regressor.
+
+MSE: 0.0726
+
+R2 Skoru: 0.9491
+
+Eğitim Zamanı: 13.9364 saniye
+
+Çıkarım Zamanı: 0.0157 saniye
+
+Random Forest Regressor, diğer modellere göre çok daha iyi sonuçlar elde etmiştir ve en doğru sınıflandırma sonuçlarını vermektedir.
+
+Arayüz
+Eğitilen modellerin ardından, kullanıcı etkileşimini kolaylaştırmak amacıyla bir grafiksel kullanıcı arayüzü (GUI) geliştirilmiştir. Tkinter tabanlı bu GUI, kullanıcıların ses dosyalarını yükleyip, bu dosyalar üzerinde enstrüman tahmini yapmalarını sağlar.
+
+İşleyiş
+
+1-Kullanıcı ses dosyasını yükler.
+
+2-Sistem, dosyayı işler, gerekli öznitelikleri çıkarır ve kaydedilen Random Forest modelini kullanarak tahmin yapar.
+
+3-Sonuç olarak, kullanıcıya hangi enstrümanın çaldığına dair bir bilgi sunulur.
