@@ -1,28 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jan 27 22:10:28 2025
+Created on Wed Jan 29 22:32:08 2025
 
 @author: pc
 """
 
-import numpy as np
+
 import os
-import time
+import numpy as np
 import tensorflow as tf
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (Input, Conv1D, Add, BatchNormalization, 
-                                      Activation, Dropout, GlobalAveragePooling1D, Dense, LayerNormalization)
-from sklearn.preprocessing import LabelEncoder
+from tensorflow import keras
+from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import (classification_report, confusion_matrix, roc_auc_score, roc_curve, auc)
-from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, roc_curve, matthews_corrcoef, cohen_kappa_score
 import matplotlib.pyplot as plt
+import time
 
-# Veriyi hazırlama
-mfcc_data = []
-labels = []
-
-# Klasör isimleri ve etiketleri eşleştiren bir sözlük
+# Klasör isimleri ve etiketler
 enstruman_klasorleri = {
     "mfcc_cikti_gitar": "gitar",
     "mfcc_cikti_kanun": "kanun",
@@ -36,166 +31,174 @@ ana_dizin = r"C:\\Users\\pc\\Desktop\\makine\\Grup17_Yazlab1"
 # Maksimum kare sayısını belirleme
 TARGET_SHAPE = (100, 13)  # 100 zaman adımı, 13 MFCC katsayısı
 
-# Her klasör için
+# Veriyi hazırlama
+X = []
+y = []
+
 for klasor, etiket in enstruman_klasorleri.items():
     klasor_yolu = os.path.join(ana_dizin, klasor)
-    
-    for dosya_adi in os.listdir(klasor_yolu):
-        if dosya_adi.endswith(".npy"):
-            dosya_yolu = os.path.join(klasor_yolu, dosya_adi)
-            mfcc = np.load(dosya_yolu)
-            
-            if mfcc.shape[1] > TARGET_SHAPE[1]:
-                mfcc = mfcc[:, :TARGET_SHAPE[1]]
-            elif mfcc.shape[1] < TARGET_SHAPE[1]:
-                padding_columns = np.zeros((mfcc.shape[0], TARGET_SHAPE[1] - mfcc.shape[1]))
-                mfcc = np.hstack((mfcc, padding_columns))
+    for dosya in os.listdir(klasor_yolu):
+        dosya_yolu = os.path.join(klasor_yolu, dosya)
+        
+        # MFCC verisini yükleme
+        mfcc_verisi = np.load(dosya_yolu)
+        
+       
+        
+        # MFCC öznitelik sayısının uyumlu olup olmadığını kontrol etme (13 öznitelik )
+        assert mfcc_verisi.shape[0] == 13 
+        
+        # Zaman adımlarını hedef şekle uyarlama
+        if mfcc_verisi.shape[1] > TARGET_SHAPE[0]:
+            # Zaman adımları fazla ise, fazlalıkları kes
+            mfcc_verisi = mfcc_verisi[:, :TARGET_SHAPE[0]]
+        elif mfcc_verisi.shape[1] < TARGET_SHAPE[0]:
+            # Zaman adımları eksikse, baştan padleme yap
+            mfcc_verisi = np.pad(mfcc_verisi, ((0, 0), (0, TARGET_SHAPE[0] - mfcc_verisi.shape[1])), mode='constant')
+        
+        # Özellik ve etiketleri ekleme
+        X.append(mfcc_verisi)
+        y.append(etiket)
 
-            if mfcc.shape[0] > TARGET_SHAPE[0]:
-                mfcc = mfcc[:TARGET_SHAPE[0], :]
-            elif mfcc.shape[0] < TARGET_SHAPE[0]:
-                padding_rows = np.zeros((TARGET_SHAPE[0] - mfcc.shape[0], TARGET_SHAPE[1]))
-                mfcc = np.vstack((mfcc, padding_rows))
-            
-            mfcc_data.append(mfcc)
-            labels.append(etiket)
+# Veriyi numpy dizilerine dönüştürme
+X = np.array(X)
+y = np.array(y)
 
-mfcc_data = np.array(mfcc_data)
-labels = np.array(labels)
-
-# Etiketleri sayısal kodlama
+# Etiketleri sayısal hale getirme
 label_encoder = LabelEncoder()
-encoded_labels = label_encoder.fit_transform(labels)
+y = label_encoder.fit_transform(y)
 
-# Veri setini eğitim ve test olarak ayırma
-X_train, X_test, y_train, y_test = train_test_split(mfcc_data, encoded_labels, test_size=0.2, random_state=42)
+# Veriyi eğitim ve test kümelerine ayırma
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-# SMOTE ile veri dengesizliğini giderme
-smote = SMOTE(random_state=42)
-X_train_smote, y_train_smote = smote.fit_resample(X_train.reshape((X_train.shape[0], -1)), y_train)
-X_train_smote = X_train_smote.reshape((X_train_smote.shape[0], TARGET_SHAPE[0], TARGET_SHAPE[1]))
-X_test = X_test.reshape((X_test.shape[0], TARGET_SHAPE[0], TARGET_SHAPE[1]))
+# Conformer Modeli
+input_layer = keras.Input(shape=(TARGET_SHAPE[1], TARGET_SHAPE[0], 1))
+x = layers.Reshape((TARGET_SHAPE[0], TARGET_SHAPE[1], 1))(input_layer)
+x = layers.Conv2D(32, (3, 3), activation="relu", padding="same")(x)
+x = layers.MaxPooling2D((2, 2))(x)
+x = layers.Conv2D(64, (3, 3), activation="relu", padding="same")(x)
+x = layers.MaxPooling2D((2, 2))(x)
+x = layers.Conv2D(128, (3, 3), activation="relu", padding="same")(x)
+x = layers.GlobalAveragePooling2D()(x)
+x = layers.Dense(128, activation="relu")(x)
+x = layers.Dropout(0.3)(x)
+output_layer = layers.Dense(len(label_encoder.classes_), activation="softmax")(x)
 
-# Conformer Blok Tanımlama
-def conformer_block(inputs, output_dim):
-    x = Conv1D(filters=output_dim, kernel_size=3, padding="same")(inputs)
-    x = BatchNormalization()(x)
-    x = Activation('relu')(x)
-    
-    # Dilated Convolution layer
-    x = Conv1D(filters=output_dim, kernel_size=3, dilation_rate=2, padding="same")(x)
-    x = BatchNormalization()(x)
-    x = Activation('relu')(x)
-    
-    # Attention Block
-    attention = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=output_dim)(x, x)
-    x = Add()([x, attention])
-    x = Dropout(0.1)(x)
-    
-    # Final Layer Normalization
-    x = LayerNormalization()(x)
-    return x
+model = keras.Model(input_layer, output_layer)
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
+model.compile(optimizer=optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 
-# Model oluşturma
-input_layer = Input(shape=(TARGET_SHAPE[0], TARGET_SHAPE[1]))
 
-x = conformer_block(input_layer, 64)
-x = conformer_block(x, 128)
-x = conformer_block(x, 256)
-
-x = GlobalAveragePooling1D()(x)
-
-x = Dense(512, activation='relu')(x)
-x = Dropout(0.5)(x)
-x = Dense(256, activation='relu')(x)
-x = Dropout(0.5)(x)
-
-output_layer = Dense(4, activation='softmax')(x)
-
-model = Model(inputs=input_layer, outputs=output_layer)
-
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-
-# Modelin eğitim zamanı ölçümü
+# Model eğitim süreci
 start_time = time.time()
-history = model.fit(X_train_smote, y_train_smote, epochs=50, batch_size=32, validation_data=(X_test, y_test))
+history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_data=(X_test, y_test))
 training_time = time.time() - start_time
 
-# Modelin tahmin zamanı ölçümü
-start_time = time.time()
-y_pred_prob = model.predict(X_test)
-inference_time = time.time() - start_time
+# Tahmin yapma
+y_pred = np.argmax(model.predict(X_test), axis=1)
 
-# Tahminler
-y_pred = np.argmax(y_pred_prob, axis=1)
-
-# Performans metrikleri
-print("\nClassification Report:")
-print(classification_report(y_test, y_pred, target_names=label_encoder.classes_))
-
-auc = roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
-print(f"AUC: {auc:.4f}")
-print(f"Training Time: {training_time:.2f} seconds")
-print(f"Inference Time: {inference_time:.2f} seconds")
+# Performans metriklerini hesaplama
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred, average='weighted')
+recall = recall_score(y_test, y_pred, average='weighted')
+f1 = f1_score(y_test, y_pred, average='weighted')
+auc = roc_auc_score(y_test, tf.keras.utils.to_categorical(y_pred, num_classes=4), multi_class='ovr')
 
 # Karmaşıklık matrisi
 cm = confusion_matrix(y_test, y_pred)
-plt.figure(figsize=(6,6))
+
+# Sensitivity (Duyarlılık) ve Specificity (Özgüllük) hesaplaması
+sensitivity = []
+specificity = []
+
+for i in range(len(label_encoder.classes_)):
+    tp = cm[i, i]
+    fn = sum(cm[i, :]) - tp
+    fp = sum(cm[:, i]) - tp
+    tn = cm.sum() - (tp + fn + fp)
+    
+    sensitivity.append(tp / (tp + fn) if (tp + fn) != 0 else 0)
+    specificity.append(tn / (tn + fp) if (tn + fp) != 0 else 0)
+
+# Ortalama sensitivity ve specificity hesaplama
+avg_sensitivity = np.mean(sensitivity)
+avg_specificity = np.mean(specificity)
+
+# Performans metriklerini yazdırma
+print("Performans Metrikleri:")
+print(f"Accuracy: {accuracy:.4f}")
+print(f"Precision: {precision:.4f}")
+print(f"Recall: {recall:.4f}")
+print(f"F1-Score: {f1:.4f}")
+print(f"AUC: {auc:.4f}")
+print(f"Average Sensitivity (Duyarlılık): {avg_sensitivity:.4f}")
+print(f"Average Specificity (Özgüllük): {avg_specificity:.4f}")
+
+# Karmaşıklık matrisinin görselleştirilmesi
+plt.figure(figsize=(8, 6))
 plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-plt.title("Karmaşıklık Matrisi")
+plt.title('Karmaşıklık Matrisi')
 plt.colorbar()
-tick_marks = np.arange(len(label_encoder.classes_))
-plt.xticks(tick_marks, label_encoder.classes_)
-plt.yticks(tick_marks, label_encoder.classes_)
-plt.ylabel('Gerçek Etiket')
-plt.xlabel('Tahmin Edilen Etiket')
+
+classes = label_encoder.classes_
+tick_marks = np.arange(len(classes))
+plt.xticks(tick_marks, classes, rotation=45)
+plt.yticks(tick_marks, classes)
+
+thresh = cm.max() / 2
+for i in range(len(classes)):
+    for j in range(len(classes)):
+        plt.text(j, i, format(cm[i, j], 'd'),
+                 ha="center", va="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+plt.ylabel('Gerçek Etiketler')
+plt.xlabel('Tahmin Edilen Etiketler')
+plt.tight_layout()
 plt.show()
 
-# ROC Eğrileri
+# Karmaşıklık matrisini yazdırma
+print("Karmaşıklık Matrisi:")
+print(cm)
+
+# ROC eğrisi
+fpr = {}
+tpr = {}
+thresholds = {}
+for i in range(4):
+    fpr[i], tpr[i], thresholds[i] = roc_curve(tf.keras.utils.to_categorical(y_test, num_classes=4)[:, i], 
+                                              tf.keras.utils.to_categorical(y_pred, num_classes=4)[:, i])
+    plt.plot(fpr[i], tpr[i], label=f'Class {label_encoder.classes_[i]} (AUC = {auc:.4f})')
+
+plt.plot([0, 1], [0, 1], 'k--')
+plt.title('ROC Eğrisi')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend(loc='best')
+plt.show()
+
+# Eğitim ve kayıp grafikleri
 plt.figure()
-for i, class_name in enumerate(label_encoder.classes_):
-    fpr, tpr, _ = roc_curve((y_test == i).astype(int), y_pred_prob[:, i])
-    plt.plot(fpr, tpr, label=f"{class_name} (AUC = {auc:.2f})")
-
-plt.title("ROC Eğrisi")
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
+plt.plot(history.history['accuracy'], label='Eğitim Doğruluğu')
+plt.plot(history.history['val_accuracy'], label='Test Doğruluğu')
+plt.title('Doğruluk Eğrisi')
+plt.xlabel('Epoch')
+plt.ylabel('Doğruluk')
 plt.legend()
-plt.show()
 
-# Eğitim/Kayıp Grafikleri
 plt.figure()
 plt.plot(history.history['loss'], label='Eğitim Kaybı')
-plt.plot(history.history['val_loss'], label='Doğrulama Kaybı')
+plt.plot(history.history['val_loss'], label='Test Kaybı')
 plt.title('Kayıp Eğrisi')
 plt.xlabel('Epoch')
 plt.ylabel('Kayıp')
 plt.legend()
 plt.show()
 
-plt.figure()
-plt.plot(history.history['accuracy'], label='Eğitim Doğruluğu')
-plt.plot(history.history['val_accuracy'], label='Doğrulama Doğruluğu')
-plt.title('Doğruluk Eğrisi')
-plt.xlabel('Epoch')
-plt.ylabel('Doğruluk')
-plt.legend()
-plt.show()
+# Çıkarım zamanı
+start_time = time.time()
+model.predict(X_test)
+inference_time = time.time() - start_time
+print(f"Çıkarım süresi: {inference_time:.4f} saniye")
 
-# Sınıf Bazlı Metrikler
-for i, class_name in enumerate(label_encoder.classes_):
-    tp = cm[i, i]
-    fn = cm[i, :].sum() - tp
-    fp = cm[:, i].sum() - tp
-    tn = cm.sum() - (tp + fp + fn)
-
-    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
-    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    f1_score = 2 * (precision * sensitivity) / (precision + sensitivity) if (precision + sensitivity) > 0 else 0
-
-    print(f"\nSınıf: {class_name}")
-    print(f"Sensitivity (Recall): {sensitivity:.4f}")
-    print(f"Specificity: {specificity:.4f}")
-    print(f"Precision: {precision:.4f}")
+print(f"Eğitim süresi: {training_time:.4f} saniye")
